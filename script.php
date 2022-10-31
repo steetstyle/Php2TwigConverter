@@ -281,8 +281,11 @@ function parseCode($context, $code, $options = [])
             case '}':
                 $contextBlockKey = $context->getCurrentBlock()->key;
                 $checkPrevBlockKey = $context->getPreviousBlock();
-                $previousBlockKey = isset($checkPrevBlockKey) ? $context->getPreviousBlock()->key : null;
-                if ($contextBlockKey == 'else if' || $contextBlockKey == 'else') {
+                if ($contextBlockKey == 'else' || $checkPrevBlockKey == 'if') {
+                    $meta = (object) [
+                        'key' =>  ('endif')
+                    ];
+                } elseif ($contextBlockKey == 'else if' || $contextBlockKey == 'else') {
                     $meta = (object) [
                         'key' =>  (($contextBlockKey != 'else if' && $contextBlockKey != 'else') ? '' : 'endif')
                     ];
@@ -291,6 +294,8 @@ function parseCode($context, $code, $options = [])
                         'key' =>  ($contextBlockKey == 'foreach') ? 'endforeach' :
                                   ($contextBlockKey == 'if' ? 'endif' : '')
                     ];
+                    $context->popBlock();
+                    $token = "";
                 }
                 if (! str_contains($code, '} else if') || ! str_contains($code, '} else {')) {
                 } else {
@@ -313,6 +318,10 @@ function parseCode($context, $code, $options = [])
                 } elseif (str_contains($code, 'slots') && str_contains($code, 'set')) {
                     $meta = parseSet($code, $context);
                     $token = "";
+                } elseif (str_contains($code, '$') && str_contains($code, ' = ') && str_contains($code, ';')) {
+                    $meta = parseSet($code, $context);
+                    $token = "";
+                    $context->popBlock();
                 }
                 break;
         }
@@ -560,16 +569,60 @@ function parseSet($code, $context)
         'key' => $operation
     ];
 
-    $str = explode('->', $code)[1];
+    $strArray = explode('->', $code);
     $matches = [];
-    preg_match('/((?<![\\\\])[\'"])((?:.(?!(?<![\\\\])\1))*.?)\1/', $str, $matches);
-    $meta->condition = parseCondition(str_replace('-', '_', $matches[2]));
-    // Remove string for next match
-    $str = str_replace($matches[0], '', $str);
+    if (count($strArray) > 1) {
+        $str = $strArray[1];
+        // slot set flow
+        // example: $view['slots']->set('page-title', 'Aracı Başvuru Formu');
+        if (str_contains($code, '$view[\'slots\']->set')) {
+            preg_match('/((?<![\\\\])[\'"])((?:.(?!(?<![\\\\])\1))*.?)\1/', $str, $matches);
 
-    $matches = [];
-    preg_match('/((?<![\\\\])[\'"])((?:.(?!(?<![\\\\])\1))*.?)\1/', $str, $matches);
-    $meta->expression = parseExpression($matches[0]);
+            $meta->condition = parseCondition(str_replace('-', '_', $matches[2]));
+            // Remove string for next match
+            $str = str_replace($matches[0], '', $str);
+
+            if (count($matches) > 0) {
+                $matches = [];
+                preg_match('/((?<![\\\\])[\'"])((?:.(?!(?<![\\\\])\1))*.?)\1/', $str, $matches);
+                $meta->expression = parseExpression($matches[0]);
+            }
+        } else {
+            // function call from variable
+            // example: $date = $dateTime->format('d.m.Y');
+            // Variable
+            preg_match('/(?=((!\$|\$)[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*[0-9\[\]]*))/', $code, $matches);
+            $meta->condition = parseCondition($matches[1]);
+
+            // Function call from variable
+            $strArray = explode(' = ', $code);
+            if (count($strArray) > 0) {
+                $parametersStr = $strArray[1];
+                $processedStr = str_replace(';', '', $parametersStr);
+                $processedStr = str_replace('->', '|', $parametersStr);
+                $meta->expression = parseExpression($processedStr);
+            }
+        }
+    } else {
+        // normal variable assignment flow
+        // example: $dateTime = \DateTime::createFromFormat('Y-m-d', $application['birth_date']);
+
+        // Variable
+        preg_match('/(?=((!\$|\$)[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*[0-9\[\]]*))/', $code, $matches);
+        $meta->condition = parseCondition($matches[1]);
+
+        // Parameters
+        $matches = [];
+        preg_match('/(?=((!\$|\$)[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*[0-9\[\]]*\s=\s))*(?:\\\\)(.*){1,}(;)/', $code, $matches);
+        if (count($matches) > 0) {
+            $parametersStr = $matches[0];
+            $processedStr = str_replace(';', '', $parametersStr);
+            $processedStr = str_replace('\DateTime::createFromFormat', 'create_date_from_format', $parametersStr);
+            $meta->expression = parseExpression($processedStr);
+        } else {
+            $meta->expression = parseExpression('null');
+        }
+    }
 
     return $meta;
 }
@@ -687,4 +740,23 @@ class Context
     {
         return array_pop($this->_blocks);
     }
+}
+
+function camelCaseToSnakeCase($str)
+{
+    // lowercase first letter
+    $str[0] = strtolower($str[0]);
+
+    $len = strlen($str);
+    for ($i = 0; $i < $len; ++$i) {
+        // see if we have an uppercase character and replace
+        if (ord($str[$i]) > 64 && ord($str[$i]) < 91) {
+            $str[$i] = '_' . strtolower($str[$i]);
+            // increase length of class and position
+            ++$len;
+            ++$i;
+        }
+    }
+
+    return $str;
 }

@@ -1,0 +1,121 @@
+<div id="goal-detail-container">
+
+    {% if (empty(productGoal)) %}
+
+        <div class="alert alert-info">
+            <p>Hedef bilgisi bulunmamaktadır.</p>
+        </div>
+
+    {% endif %}
+
+        {% if ( not parameters['monthly_view']) %}
+
+            <table class="table table-bordered table-condensed table-striped">
+                <thead>
+                    <tr>
+                        <th scope="col" width="15%">Ürün</th>
+                        <th scope="col" width="15%">Üretim</th>
+                        <th scope="col" width="15%">Hedef</th>
+                        <th scope="col" width="60%">Gerçekleşme Yüzdesi</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for goal in productGoal %}
+
+                        {% endif %}
+
+                        <tr>
+                            <td>{{  goal['name'] }}</td>
+                            <td>{{ goal['production']|format_number }} TL</td>
+                            <td>{{ goal['amount_goal']|format_number }} TL</td>
+                            <td>
+                                <div class="mb-2">
+                                    {{ goal['production']|format_number }} TL / {{ goal['amount_goal']|format_number }} TL
+                                </div>
+
+                                <b class="text-primary">%{{  number_format(percentage, 2, ',', '.') }}</b>
+
+                                <div class="progress mt-4 mb-2">
+                                    <div
+                                        class="progress-bar {% if (percentage < 5) %}"
+                                        style="width: {{ percentage }}%"
+                                        title="Oto dışı üretim hedef durumu %{{ percentage }}"
+                                        data-placement="top"
+                                        data-toggle="tooltip"
+                                    >
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+
+        {% else %}
+
+            {% if (parameters['cumulative_view']) %}
+                <h5 class="proposal-sub-title-modal mt-4">Toplam Üretim & Hedef Dağılımı</h5>
+            {% endif %}
+                {% if ( not empty(parameters['product_id']) and empty(parameters['month_id'])) %}
+                    <h5 class="proposal-sub-title-modal mt-4 product-title"></h5>
+                {% endif %}
+                    <h5 class="proposal-sub-title-modal mt-4">{{  view['general']->formatMonthTitle(parameters['month_id']) }}</h5>
+                {% endif %}
+            {% endif %}
+
+            <table class="table table-bordered table-striped table-sticky">
+                <thead class="sticky-table-header">
+                    <tr>
+                        {% if ( not parameters['cumulative_view'] and ( not empty(parameters['product_id']) and empty(parameters['month_id']))) %}
+                            <th scope="col" width="20%" class="table-sticky-border fw-700">Ay</th>
+                        {% endif %}
+                            <th scope="col" width="20%" class="table-sticky-border fw-700">Ürün</th>
+                        {% endif %}
+                        <th scope="col" width="15%" class="table-sticky-border fw-700">Toplam Üretim</th>
+                        <th scope="col" width="15%" class="table-sticky-border fw-700">Toplam Hedef</th>
+                        <th scope="col" width="50%" class="table-sticky-border fw-700">Gerçekleşme Yüzdesi</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if (parameters['cumulative_view']) %}
+                        {% for data in productGoal['cumulativeData']['records'] %}
+                            {% include 'report/table-body.html.twig' with { ['data' => $data] } %}
+                        {% endfor %}
+                    {% endif %}
+                        {% if ( not empty(parameters['product_id']) and empty(parameters['month_id'])) %}
+                            {% for k, m in parameters['turkishMonths'] %}
+                                {% for d in productGoal['data']['records'] %}
+                                    {% for data in d['monthly_data'] %}
+                                        {% if (k == data['month'] and data['month'] <= date('m')) %}
+                                            {% include 'report/table-body.html.twig' with { ['data' => $data, 'displayMonths' => true] } %}
+                                        {% endif %}
+                                    {% endfor %}
+                                {% endfor %}
+                            {% endfor %}
+                        {% endif %}
+                            {% for d in productGoal['data']['records'] %}
+                                {% for data in d['monthly_data'] %}
+                                    {% include 'report/table-body.html.twig' with { ['data' => $data] } %}
+                                {% endfor %}
+                            {% endfor %}
+                        {% endif %}
+                    {% endif %}
+                </tbody>
+                <tfoot>
+                    {% if (parameters['cumulative_view']) %}
+                        {% include 'report/table-foot.html.twig' with { ['title' => 'GENEL TOPLAM', 'data' => $productGoal['cumulativeData']] } %}
+                    {% endif %}
+                        {% if (empty(parameters['product_id']) and  not empty(parameters['month_id'])) %}
+                            {% include 'report/table-foot.html.twig' with { ['title' => 'AY TOPLAM', 'data' => $productGoal['data']] } %}
+                            {% include 'report/table-foot.html.twig' with { ['title' => 'GENEL TOPLAM', 'data' => $productGoal['cumulativeData']] } %}
+                        {% endif %}
+                            {% include 'report/table-foot.html.twig' with { ['title' => 'TOPLAM', 'data' => $productGoal['cumulativeData']] } %}
+                        {% else %}
+                            {% include 'report/table-foot.html.twig' with { ['title' => 'GENEL TOPLAM', 'data' => $productGoal['cumulativeData']] } %}
+                        {% endif %}
+                    {% endif %}
+                </tfoot>
+            </table>
+        {% endif %}
+    {% endif %}
+</div>
